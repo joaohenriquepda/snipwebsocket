@@ -14,7 +14,7 @@ const server = express()
 
 const io = require('socket.io')(server, {
     transports: ['websocket'],
-    pingInterval: 200,
+    pingInterval: 100,
     pingTimeout: 50000,
     handlePreflightRequest: (req, res) => {
         const headers = {
@@ -45,63 +45,58 @@ var getMessage = function (data, text, user, users, status) {
     return msg;
 };
 
-io.on('connection', (socket) => {
+var getChannels = function (data) {
+    return CHANNELS[data.collection][data.thing][0];
+}
 
-    // socket.on('register', function (data) {
-    //     console.log("Register", data);
-    // });
+var setInfoChannels = function (data, status, user) {
+    CHANNELS[data.collection][data.thing][0]["status"] = status;
+    CHANNELS[data.collection][data.thing][0]["id_edit"] = user.id;
+    CHANNELS[data.collection][data.thing][0]["user_edit"] = user;
+}
+
+
+io.on('connection', (socket) => {
 
     socket.on('open-edit', function (info) {
 
         console.log('OPEN EDIT___________________________________');
         var data = JSON.parse(info);
-        socket.join(data.collection);
+        var room = data.collection + data.thing
+        socket.join(room);
         USERS.push({ data, id: socket.id });
 
+        //Connectados no channel
+        var elements = Object.keys(io.sockets.adapter.rooms[room].sockets)
+
         if (Object.keys(CHANNELS).indexOf(data.collection) === -1) {
-            // console.log('Não Tinha');
             CHANNELS[data.collection] = [];
             CHANNELS[data.collection][data.thing] = [{ "status": "alert", "user_edit": "0", "id_edit": "0" }];
         } else {
-            // console.log("Entidade já registrada");
             if (Object.keys(CHANNELS[data.collection]).indexOf(data.thing) === -1) {
                 CHANNELS[data.collection][data.thing] = [{ "status": "alert", "user_edit": "0", "id_edit": "0" }];
             }
         }
+        var channel = CHANNELS[data.collection][data.thing][0];
 
         //  Procurar uma melhor forma de realizar esse filter - provavelmente listar os usuário de um canal e selecionar pelo socket_id
         var users = USERS.filter(user => (user.data.collection === data.collection && user.data.thing === data.thing));
-        console.log("CHECK", CHANNELS[data.collection][data.thing][0]['user_edit']);
 
-        if (CHANNELS[data.collection][data.thing][0]['user_edit'] === '0') {
-            console.log("undefine");
+        if (channel.user_edit === '0') {
             var user = '';
         } else {
-            console.log("NãO undefine");
-            var user = CHANNELS[data.collection][data.thing][0]['user_edit']
+            var user = channel.user_edit
         }
 
-
         var text = (users.length > 1) ? "Outras pessoas estão visualizando o mesmo arquivo" : "";
-        var status = CHANNELS[data.collection][data.thing][0]['status'];
-        var id_edit = CHANNELS[data.collection][data.thing][0]['id_edit'];
+        var status = channel.status;
         var msg = getMessage(data, text, user, users, status);
-        var clients = io.sockets.adapter.rooms[data.collection].sockets;
 
-        console.log(clients);
-
-        // console.log("VERIFY", CHANNELS[data.collection][data.thing]);
-        var ele = Object.keys(clients)
-        // console.log("SHOW WLW", ele);
-        if (CHANNELS[data.collection][data.thing][0].status !== 'block') {
-            io.to(data.collection).emit('message', msg);
+        if (channel.status !== 'block') {
+            io.to(room).emit('message', msg);
         } else {
-            ele.forEach(element => {
-                console.log(CHANNELS[data.collection][data.thing][0]);
-                console.log("ELEMENTO", element);
-                if (CHANNELS[data.collection][data.thing][0].id_edit != element) {
-                    console.log("ENVIOU");
-                    msg.message = "PA VC FOI CARALHo"
+            elements.forEach(element => {
+                if (channel.id_edit != element) {
                     io.to(element).emit('message', msg);
                 }
             });
@@ -111,26 +106,19 @@ io.on('connection', (socket) => {
 
     socket.on('unarchive-edit', function (data) {
 
-        console.log("unarchived-edit");
+        console.log("unarchived-edit________________");
         var info = JSON.parse(data);
-
-        console.log(info.collection);
-        console.log(info.thing);
-        console.log(CHANNELS);
-
+        var room = info.collection + info.thing
         var users = USERS.filter(user => (user.data.collection === info.collection && user.data.thing === info.thing));
         var user = users.filter(user => (user.id === socket.id));
 
-        CHANNELS[info.collection][info.thing][0]["status"] = "alert";
-        CHANNELS[info.collection][info.thing][0]["id_edit"] = '';
-        CHANNELS[info.collection][info.thing][0]["user_edit"] = '';
+        setInfoChannels(info, 'alert', user);
 
-        var id_edit = CHANNELS[info.collection][info.thing][0]['id_edit'];
-        var status = CHANNELS[info.collection][info.thing][0]['status'];
+        var status = getChannels(info).status;
         var text = "Arquivo desarquivado";
         var msg = getMessage(info, text, user, users, status);
 
-        socket.to(info.collection).emit('message', msg);
+        socket.to(room).emit('message', msg);
 
     });
 
@@ -138,150 +126,112 @@ io.on('connection', (socket) => {
     socket.on('archived-edit', function (data) {
         console.log("archived-edit");
         var info = JSON.parse(data);
-
+        var room = info.collection + info.thing
         var users = USERS.filter(user => (user.data.collection === info.collection && user.data.thing === info.thing));
-        var user = users.filter(user => (user.id === socket.id));
+        var user = users.filter(user => (user.id === socket.id))[0];
 
-        CHANNELS[info.collection][info.thing][0]["status"] = "archived";
-        CHANNELS[info.collection][info.thing][0]["id_edit"] = '';
-        CHANNELS[info.collection][info.thing][0]["user_edit"] = '';
+        setInfoChannels(info, 'archived', user);
 
-        var status = CHANNELS[info.collection][info.thing][0]['status'];
+        var status = getChannels(info).status;
         var text = "Arquivado";
         var msg = getMessage(info, text, user, users, status);
 
-        socket.to(info.collection).emit('message', msg);
+        socket.to(room).emit('message', msg);
     });
 
     socket.on('save-edit', function (data) {
         console.log("Save-edit");
         var info = JSON.parse(data);
-
+        var room = info.collection + info.thing
         var users = USERS.filter(user => (user.data.collection === info.collection && user.data.thing === info.thing));
         var user = users.filter(user => (user.id === socket.id))[0];
 
-        CHANNELS[info.collection][info.thing][0]["status"] = "update";
-        CHANNELS[info.collection][info.thing][0]["id_edit"] = user.id;
-        CHANNELS[info.collection][info.thing][0]["user_edit"] = user;
+        setInfoChannels(info, 'archived', user);
 
-        var id_edit = CHANNELS[info.collection][info.thing][0]['id_edit'];
-        var status = CHANNELS[info.collection][info.thing][0]['status'];
+        var status = getChannels(info).status;
         var text = "A edição está desabilitada";
         var msg = getMessage(info, text, user, users, status);
 
-        socket.to(info.collection).emit('message', msg);
+        socket.to(room).emit('message', msg);
     });
 
     socket.on('file-edit', function (data) {
         console.log("File Edit__________________________________________________________________________");
         var info = JSON.parse(data);
+        var room = info.collection + info.thing
         var users = USERS.filter(user => (user.data.collection === info.collection && user.data.thing === info.thing));
         var user = users.filter(user => user.id === socket.id)[0];
 
-        CHANNELS[info.collection][info.thing][0]['status'] = 'block';
-        CHANNELS[info.collection][info.thing][0]['id_edit'] = user.id;
-        CHANNELS[info.collection][info.thing][0]['user_edit'] = user;
+        setInfoChannels(info, 'block', user);
 
-        console.log("ID EDIT", CHANNELS[info.collection][info.thing][0]['id_edit']);
-        console.log("USER_EDIT", CHANNELS[info.collection][info.thing][0]['user_edit']);
-        console.log("STATUS", CHANNELS[info.collection][info.thing][0]['status']);
-
+        var status = getChannels(info).status;
         var text = "A edição está desabilitada";
-        var status = CHANNELS[info.collection][info.thing][0]['status'];
         var msg = getMessage(info, text, user, users, status);
 
-        socket.to(info.collection).emit('message', msg);
+        socket.to(room).emit('message', msg);
     });
 
     socket.on('close-connection', function (info) {
 
         console.log('close Connection________________________________________________--');
         var data = JSON.parse(info);
-        socket.leave(data.collection);
+        var room = data.collection + data.thing
+        socket.leave(room);
         var index = USERS.findIndex(user => user.id === socket.id);
-        var user_off = USERS.filter(user => {
-            return (user.id === socket.id);
-        })[0];
-
+        var user_off = USERS.filter(user => user.id === socket.id)[0];
+        var users = USERS.filter(user => (user.data.collection === data.collection && user.data.thing === data.thing));
         USERS.splice(index, 1);
-        console.log("User EDIT ID", CHANNELS[data.collection][data.thing][0]['id_edit']);
-        console.log("ANTES", CHANNELS[data.collection][data.thing][0]["status"]);
 
-        if (CHANNELS[user_off.data.collection][data.thing][0]['id_edit'] === socket.id) {
+        var check = getChannels(user_off.data)
 
-            if (CHANNELS[data.collection][data.thing][0]["status"] != 'archived') {
-                console.log("!= ARCHIVED");
-                CHANNELS[data.collection][data.thing][0]["status"] = 'alert';
+        if (check.id_edit === socket.id) {
+            if (check.status != 'archived') {
+                check.status = 'alert';
             }
         }
 
-        console.log("DEPOIS", CHANNELS[data.collection][data.thing][0]["status"]);
-        var users = USERS.filter(user => (user.data.collection === data.collection && user.data.thing === data.thing));
-        var user = CHANNELS[data.collection][data.thing][0]['user_edit'];
-        var status = CHANNELS[data.collection][data.thing][0]['status'];
+        var info_channel = getChannels(data);
+
+        var user = info_channel.user_edit;
+        var status = info_channel.status;
         var text = "";
-        var id_edit = CHANNELS[data.collection][data.thing][0]['id_edit'];
-        var msg = getMessage(data, text, user, users, status, id_edit, socket.id);
+        var msg = getMessage(data, text, user, users, status);
 
-        if (CHANNELS[data.collection][data.thing][0].status !== 'block') {
-            console.log("DIFERENTE DE BLOCK");
-            io.in(data.collection).emit('message', msg);
+        if (info_channel.status !== 'block') {
+            io.in(room).emit('message', msg);
         } else {
-
-            var clients = io.sockets.adapter.rooms[data.collection].sockets;
-            var ele = Object.keys(clients)
-            console.log(clients);
-
-            ele.forEach(element => {
-                console.log(CHANNELS[data.collection][data.thing][0]);
-                console.log("ELEMENTO", element);
-                if (CHANNELS[data.collection][data.thing][0].id_edit != element) {
-                    console.log("ENVIOU");
-                    msg.message = "logout"
+            var clients = Object.keys(io.sockets.adapter.rooms[room].sockets);
+            clients.forEach(element => {
+                if (info_channel.id_edit != element) {
                     io.to(element).emit('message', msg);
                 }
             });
         }
-
-        // io.in(data.collection).emit('message', msg);
-
     });
 
     socket.on('disconnect', function () {
         console.log('client disconnect...______________________________________________');
-        // var data = JSON.parse(info);
-        // console.log(USERS);
-        console.log(socket.id);
-        var index = USERS.findIndex(user => {
-            return (user.id === socket.id);
-        });
-        console.log(index);
-        var user_off = USERS.filter(user => {
-            return (user.id === socket.id);
-        })[0];
+        var room = data.collection + data.thing
+        var index = USERS.findIndex(user => user.id === socket.id);
+        var user_off = USERS.filter(user => user.id === socket.id)[0];
         USERS.splice(index, 1);
 
         if (user_off != undefined) {
-
-            console.log("User", user_off.data);
-
-            if (CHANNELS[user_off.data.collection][user_off.data.thing][0]["id_edit"] === socket.id) {
-
-                if (CHANNELS[user_off.data.collection][user_off.data.thing][0]["status"] != 'archived') {
-                    CHANNELS[user_off.data.collection][user_off.data.thing][0]["status"] = 'alert';
+            var check = getChannels(user_off.data);
+            if (check.id_edit === socket.id) {
+                if (check.status != 'archived') {
+                    check.status = 'alert';
                 }
             }
 
             var users = USERS.filter(user => (user.data.collection === user_off.data.collection && user.data.thing === user_off.data.thing));
-            var user = CHANNELS[user_off.data.collection][user_off.data.thing][0]['user_edit'];
+            var user = check.user_edit;
             var data = { collection: user_off.data.collection, thing: user_off.data.thing };
-
-            var status = CHANNELS[user_off.data.collection][user_off.data.thing][0]['status'];
+            var status = check.status;
             var text = '';
-            var id_edit = CHANNELS[user_off.data.collection][user_off.data.thing][0]['id_edit'];
             var msg = getMessage(data, text, user, users, status);
 
-            io.in(data.collection).emit('message', msg);
+            io.in(room).emit('message', msg);
         }
 
     });
