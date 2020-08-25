@@ -3,7 +3,7 @@
 const express = require('express');
 const url = require('url');
 
-const WebSocket = require('ws').Server;
+// const WebSocket = require('ws').Server;
 
 const PORT = process.env.PORT || 9000;
 const INDEX = '/index.html';
@@ -12,10 +12,13 @@ const server = express()
     .use((req, res) => res.sendFile(INDEX, { root: __dirname }))
     .listen(PORT, () => console.log(`Listening on ${PORT}`));
 
+// const wss = new WebSocket({ server });
+
 const io = require('socket.io')(server, {
     transports: ['websocket'],
-    pingInterval: 100,
+    pingInterval: 0,
     pingTimeout: 50000,
+    perMessageDeflate: false,
     handlePreflightRequest: (req, res) => {
         const headers = {
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
@@ -28,7 +31,6 @@ const io = require('socket.io')(server, {
 })
 
 console.log("SNIP WEBSOCKET EDIT FILE SERVER UP!!!");
-// const wss = new WebSocket({ server: app });
 var CHANNELS = [];
 var USERS = [];
 
@@ -71,10 +73,10 @@ io.on('connection', (socket) => {
 
         if (Object.keys(CHANNELS).indexOf(data.collection) === -1) {
             CHANNELS[data.collection] = [];
-            CHANNELS[data.collection][data.thing] = [{ "status": "alert", "user_edit": "0", "id_edit": "0" }];
+            CHANNELS[data.collection][data.thing] = [{ "status": "alert", "user_edit": "", "id_edit": "" }];
         } else {
             if (Object.keys(CHANNELS[data.collection]).indexOf(data.thing) === -1) {
-                CHANNELS[data.collection][data.thing] = [{ "status": "alert", "user_edit": "0", "id_edit": "0" }];
+                CHANNELS[data.collection][data.thing] = [{ "status": "alert", "user_edit": "", "id_edit": "" }];
             }
         }
         var channel = CHANNELS[data.collection][data.thing][0];
@@ -82,7 +84,7 @@ io.on('connection', (socket) => {
         //  Procurar uma melhor forma de realizar esse filter - provavelmente listar os usuário de um canal e selecionar pelo socket_id
         var users = USERS.filter(user => (user.data.collection === data.collection && user.data.thing === data.thing));
 
-        if (channel.user_edit === '0') {
+        if (channel.user_edit === '') {
             var user = '';
         } else {
             var user = channel.user_edit
@@ -92,16 +94,15 @@ io.on('connection', (socket) => {
         var status = channel.status;
         var msg = getMessage(data, text, user, users, status);
 
-        if (channel.status !== 'block') {
-            io.to(room).emit('message', msg);
-        } else {
+        if (channel.status === 'block') {
             elements.forEach(element => {
                 if (channel.id_edit != element) {
                     io.to(element).emit('message', msg);
                 }
             });
+        } else {
+            io.to(room).emit('message', msg);
         }
-
     });
 
     socket.on('unarchive-edit', function (data) {
@@ -140,19 +141,27 @@ io.on('connection', (socket) => {
     });
 
     socket.on('save-edit', function (data) {
-        console.log("Save-edit");
+        console.log("Save-edit____________");
         var info = JSON.parse(data);
         var room = info.collection + info.thing
         var users = USERS.filter(user => (user.data.collection === info.collection && user.data.thing === info.thing));
         var user = users.filter(user => (user.id === socket.id))[0];
 
-        setInfoChannels(info, 'archived', user);
+        setInfoChannels(info, 'update', user);
 
-        var status = getChannels(info).status;
+        var channel = getChannels(info);
+        var status = channel.status;
         var text = "A edição está desabilitada";
         var msg = getMessage(info, text, user, users, status);
 
-        socket.to(room).emit('message', msg);
+        var clients = Object.keys(io.sockets.adapter.rooms[room].sockets);
+        clients.forEach(element => {
+            if (channel.id_edit != element) {
+                io.to(element).emit('message', msg);
+            }
+        })
+
+        // socket.to(room).emit('message', msg);
     });
 
     socket.on('file-edit', function (data) {
@@ -164,11 +173,19 @@ io.on('connection', (socket) => {
 
         setInfoChannels(info, 'block', user);
 
-        var status = getChannels(info).status;
+        var channel = getChannels(info);
+        var status = channel.status;
         var text = "A edição está desabilitada";
         var msg = getMessage(info, text, user, users, status);
 
-        socket.to(room).emit('message', msg);
+
+        var clients = Object.keys(io.sockets.adapter.rooms[room].sockets);
+        clients.forEach(element => {
+            if (channel.id_edit != element) {
+                io.to(element).emit('message', msg);
+            }
+        })
+        // socket.to(room).emit('message', msg);
     });
 
     socket.on('close-connection', function (info) {
@@ -179,8 +196,8 @@ io.on('connection', (socket) => {
         socket.leave(room);
         var index = USERS.findIndex(user => user.id === socket.id);
         var user_off = USERS.filter(user => user.id === socket.id)[0];
-        var users = USERS.filter(user => (user.data.collection === data.collection && user.data.thing === data.thing));
         USERS.splice(index, 1);
+        var users = USERS.filter(user => (user.data.collection === data.collection && user.data.thing === data.thing));
 
         var check = getChannels(user_off.data)
 
@@ -241,9 +258,11 @@ io.on('connection', (socket) => {
         console.log(err);
     });
 });
+
+
 //// AQUI COMEÇA O NOVO
 
-// // initialization
+// initialization
 // var CHANNELS = [];
 
 // wss.broadcastChannel = function broadcastChannel(channel, data) {
@@ -380,6 +399,11 @@ io.on('connection', (socket) => {
 // };
 
 // wss.on('connection', (ws, req) => {
+
+//     ws.on('test', function test() { 
+//         console.log("sfvpviernjviowrjv-mwróvjmeropbjepobjeopbjeopbkqepobjpotedjk");
+//     });
+
 //     ws.on('message', function incoming(data) {
 //         console.log(data);
 //         data = JSON.parse(data);
