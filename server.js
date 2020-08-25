@@ -13,7 +13,8 @@ const server = express()
     .listen(PORT, () => console.log(`Listening on ${PORT}`));
 
 const io = require('socket.io')(server, {
-    pingInterval: 600,
+    transports: ['websocket'],
+    pingInterval: 200,
     pingTimeout: 500,
 })
 // const io = require('socket.io').listen(app, { transports: ['websocket'] });
