@@ -15,7 +15,7 @@ const server = express()
 const io = require('socket.io')(server, {
     transports: ['websocket'],
     pingInterval: 200,
-    pingTimeout: 500,
+    pingTimeout: 50000,
     handlePreflightRequest: (req, res) => {
         const headers = {
             "Access-Control-Allow-Headers": "Content-Type, Authorization",
