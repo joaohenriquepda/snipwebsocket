@@ -26,18 +26,6 @@ const io = require('socket.io')(server, {
         res.end();
     }
 })
-// const io = require('socket.io').listen(app, { transports: ['websocket'] });
-// const io = require('socket.io')().listen(app);
-
-// const io = require('socket.io')(server);
-// const io = require('socket.io')().listen(server);
-// const io = require('socket.io').listen(server);
-// const io = require('socket.io')(server, { 'transports': ['websocket', 'polling'] });
-
-
-// const io = require('socket.io')(app);
-//  const io = require('socket.io')(app, { 'transports': ['websocket', 'polling'] });
-
 
 console.log("SNIP WEBSOCKET EDIT FILE SERVER UP!!!");
 // const wss = new WebSocket({ server: app });
@@ -64,26 +52,36 @@ io.on('connection', (socket) => {
     // });
 
     socket.on('open-edit', function (info) {
-        console.log('OPEN EDIT');
+
+        console.log('OPEN EDIT___________________________________');
         var data = JSON.parse(info);
-        console.log(data.thing);
         socket.join(data.collection);
         USERS.push({ data, id: socket.id });
 
         if (Object.keys(CHANNELS).indexOf(data.collection) === -1) {
-            console.log('Não Tinha');
+            // console.log('Não Tinha');
             CHANNELS[data.collection] = [];
             CHANNELS[data.collection][data.thing] = [{ "status": "alert", "user_edit": "0", "id_edit": "0" }];
         } else {
-            console.log("Entidade já registrada");
+            // console.log("Entidade já registrada");
             if (Object.keys(CHANNELS[data.collection]).indexOf(data.thing) === -1) {
                 CHANNELS[data.collection][data.thing] = [{ "status": "alert", "user_edit": "0", "id_edit": "0" }];
             }
         }
 
+        //  Procurar uma melhor forma de realizar esse filter - provavelmente listar os usuário de um canal e selecionar pelo socket_id
         var users = USERS.filter(user => (user.data.collection === data.collection && user.data.thing === data.thing));
-        var user = CHANNELS[data.collection][data.thing][0]['user_id'];
-        // users.filter(user => user.id === socket.id);
+        console.log("CHECK", CHANNELS[data.collection][data.thing][0]['user_edit']);
+
+        if (CHANNELS[data.collection][data.thing][0]['user_edit'] === '0') {
+            console.log("undefine");
+            var user = '';
+        } else {
+            console.log("NãO undefine");
+            var user = CHANNELS[data.collection][data.thing][0]['user_edit']
+        }
+
+
         var text = (users.length > 1) ? "Outras pessoas estão visualizando o mesmo arquivo" : "";
         var status = CHANNELS[data.collection][data.thing][0]['status'];
         var id_edit = CHANNELS[data.collection][data.thing][0]['id_edit'];
@@ -160,11 +158,11 @@ io.on('connection', (socket) => {
         var info = JSON.parse(data);
 
         var users = USERS.filter(user => (user.data.collection === info.collection && user.data.thing === info.thing));
-        var user = users.filter(user => (user.id === socket.id));
+        var user = users.filter(user => (user.id === socket.id))[0];
 
         CHANNELS[info.collection][info.thing][0]["status"] = "update";
-        CHANNELS[info.collection][info.thing][0]["id_edit"] = user;
-        CHANNELS[info.collection][info.thing][0]["user_edit"] = user.id;
+        CHANNELS[info.collection][info.thing][0]["id_edit"] = user.id;
+        CHANNELS[info.collection][info.thing][0]["user_edit"] = user;
 
         var id_edit = CHANNELS[info.collection][info.thing][0]['id_edit'];
         var status = CHANNELS[info.collection][info.thing][0]['status'];
@@ -180,17 +178,15 @@ io.on('connection', (socket) => {
         var users = USERS.filter(user => (user.data.collection === info.collection && user.data.thing === info.thing));
         var user = users.filter(user => user.id === socket.id)[0];
 
-        console.log(user);
-        CHANNELS[info.collection][info.thing][0].status = 'block';
-        CHANNELS[info.collection][info.thing][0].user_edit = user;
-        CHANNELS[info.collection][info.thing][0].id_edit = user.id;
+        CHANNELS[info.collection][info.thing][0]['status'] = 'block';
+        CHANNELS[info.collection][info.thing][0]['id_edit'] = user.id;
+        CHANNELS[info.collection][info.thing][0]['user_edit'] = user;
 
-        console.log(CHANNELS[info.collection][info.thing][0]);
-        console.log("ERA PRA", CHANNELS[info.collection][info.thing][0]['id_edit']);
-        console.log("ERA PARA", CHANNELS[info.collection][info.thing][0]['user_edit']);
+        console.log("ID EDIT", CHANNELS[info.collection][info.thing][0]['id_edit']);
+        console.log("USER_EDIT", CHANNELS[info.collection][info.thing][0]['user_edit']);
+        console.log("STATUS", CHANNELS[info.collection][info.thing][0]['status']);
 
         var text = "A edição está desabilitada";
-        var id_edit = CHANNELS[info.collection][info.thing][0]['id_edit'];
         var status = CHANNELS[info.collection][info.thing][0]['status'];
         var msg = getMessage(info, text, user, users, status);
 
