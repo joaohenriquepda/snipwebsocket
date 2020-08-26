@@ -192,7 +192,6 @@ io.on('connection', (socket) => {
 
     socket.on('close-connection', function (info) {
         console.log('close Connection________________________________________________--');
-        console.log(info);
         if (info != null) {
             var data = JSON.parse(info);
             var room = data.collection + data.thing;
