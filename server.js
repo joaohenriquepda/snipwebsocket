@@ -1,7 +1,6 @@
 'use strict';
 
 const express = require('express');
-const url = require('url');
 const socketio = require('socket.io');
 
 const PORT = process.env.PORT || 9000;
@@ -79,7 +78,6 @@ io.on('connection', (socket) => {
         }
         var channel = CHANNELS[data.collection][data.thing][0];
 
-        //  Procurar uma melhor forma de realizar esse filter - provavelmente listar os usuário de um canal e selecionar pelo socket_id
         var users = USERS.filter(user => (user.data.collection === data.collection && user.data.thing === data.thing));
 
         var user;
